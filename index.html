@@ -23,57 +23,79 @@
     </div>
     <ul id="todoList"></ul>
 
-    <script>
-        // ⚠️ 把这里换成你部署后的 Worker URL
+   <script>
         const API_URL = "https://todo-backend.bigwork.workers.dev/todos";
+        
+        // 1. 获取或设置密码
+        function getApiKey() {
+            let key = localStorage.getItem('todo_api_key');
+            if (!key) {
+                key = prompt("请输入访问密码 (API Key):");
+                if (key) {
+                    localStorage.setItem('todo_api_key', key);
+                }
+            }
+            return key;
+        }
 
-        // 获取列表
+        // 2. 封装一个带认证头的请求函数
+        async function authFetch(url, options = {}) {
+            const key = getApiKey();
+            if (!key) return null; // 如果用户取消输入，就不发送请求
+
+            // 合并 Headers
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-Api-Key': key, // <--- 把密码放在这里
+                ...(options.headers || {})
+            };
+
+            const res = await fetch(url, { ...options, headers });
+
+            // 如果后端返回 403 Forbidden，说明密码错了
+            if (res.status === 403) {
+                alert("密码错误！请重新输入。");
+                localStorage.removeItem('todo_api_key'); // 清除错误密码
+                location.reload(); // 刷新页面重新输入
+                return null;
+            }
+            return res;
+        }
+
+        // --- 下面是修改后的业务逻辑，把 fetch 换成 authFetch ---
+
         async function fetchTodos() {
-            const res = await fetch(API_URL);
-            const todos = await res.json();
-            render(todos);
+            const res = await authFetch(API_URL);
+            if(res) {
+                const todos = await res.json();
+                render(todos);
+            }
         }
 
-        // 渲染界面
-        function render(todos) {
-            const list = document.getElementById('todoList');
-            list.innerHTML = todos.map(todo => `
-                <li class="${todo.completed ? 'completed' : ''}">
-                    <span onclick="toggleTodo(${todo.id}, ${!todo.completed})" style="cursor:pointer; flex:1">
-                        ${todo.task}
-                    </span>
-                    <button class="delete-btn" onclick="deleteTodo(${todo.id})">×</button>
-                </li>
-            `).join('');
-        }
-
-        // 添加任务
         async function addTodo() {
             const input = document.getElementById('taskInput');
             if (!input.value) return;
-            await fetch(API_URL, {
+            
+            // 注意这里不需要手动写 Content-Type 了，authFetch 里封装了
+            await authFetch(API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ task: input.value })
             });
             input.value = '';
             fetchTodos();
         }
 
-        // 切换状态
         async function toggleTodo(id, status) {
-            await fetch(`${API_URL}/${id}`, {
+            await authFetch(`${API_URL}/${id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ completed: status })
             });
             fetchTodos();
         }
 
-        // 删除任务
         async function deleteTodo(id) {
             if(!confirm('确定删除吗？')) return;
-            await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+            await authFetch(`${API_URL}/${id}`, { method: 'DELETE' });
             fetchTodos();
         }
 
