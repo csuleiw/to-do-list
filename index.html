@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloudflare D1 Todo</title>
+    <style>
+        body { font-family: sans-serif; max-width: 500px; margin: 2rem auto; padding: 0 1rem; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] { flex: 1; padding: 8px; }
+        button { padding: 8px 16px; cursor: pointer; }
+        ul { list-style: none; padding: 0; }
+        li { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; align-items: center;}
+        li.completed span { text-decoration: line-through; color: #888; }
+        .delete-btn { color: red; margin-left: 10px; cursor: pointer; border: none; background: none;}
+    </style>
+</head>
+<body>
+    <h1>待办清单 ✅</h1>
+    <div class="input-group">
+        <input type="text" id="taskInput" placeholder="输入新任务...">
+        <button onclick="addTodo()">添加</button>
+    </div>
+    <ul id="todoList"></ul>
+
+    <script>
+        // ⚠️ 把这里换成你部署后的 Worker URL
+        const API_URL = "https://todo-backend.bigwork.workers.dev";
+
+        // 获取列表
+        async function fetchTodos() {
+            const res = await fetch(API_URL);
+            const todos = await res.json();
+            render(todos);
+        }
+
+        // 渲染界面
+        function render(todos) {
+            const list = document.getElementById('todoList');
+            list.innerHTML = todos.map(todo => `
+                <li class="${todo.completed ? 'completed' : ''}">
+                    <span onclick="toggleTodo(${todo.id}, ${!todo.completed})" style="cursor:pointer; flex:1">
+                        ${todo.task}
+                    </span>
+                    <button class="delete-btn" onclick="deleteTodo(${todo.id})">×</button>
+                </li>
+            `).join('');
+        }
+
+        // 添加任务
+        async function addTodo() {
+            const input = document.getElementById('taskInput');
+            if (!input.value) return;
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task: input.value })
+            });
+            input.value = '';
+            fetchTodos();
+        }
+
+        // 切换状态
+        async function toggleTodo(id, status) {
+            await fetch(`${API_URL}/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ completed: status })
+            });
+            fetchTodos();
+        }
+
+        // 删除任务
+        async function deleteTodo(id) {
+            if(!confirm('确定删除吗？')) return;
+            await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+            fetchTodos();
+        }
+
+        // 初始化
+        fetchTodos();
+    </script>
+</body>
+</html>
